@@ -3,13 +3,14 @@ import { Inter } from "next/font/google"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
+import { Toaster } from "@/components/ui/toaster"; 
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
   title: "AttendEase - Smart Attendance System",
   description: "QR-based attendance tracking with anti-proxy measures",
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -23,6 +24,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <SidebarProvider>{children}</SidebarProvider>
         </ThemeProvider>
+        <Toaster />  
       </body>
     </html>
   )

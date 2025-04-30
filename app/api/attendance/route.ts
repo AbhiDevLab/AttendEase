@@ -1,84 +1,80 @@
-import { type NextRequest, NextResponse } from "next/server"
-
-// Mock database for demonstration
-const attendanceRecords: Record<string, any>[] = []
+import { NextRequest, NextResponse } from 'next/server';
+import connectToDatabase from '@/lib/mongodb';
+import Attendance from '@/models/Attendance';
+import { verifyQRToken } from '@/lib/qr-utils';
 
 export async function POST(req: NextRequest) {
   try {
-    const data = await req.json()
-    const { studentId, courseId, qrToken, timestamp, deviceInfo, isLiveCapture } = data
+    const data = await req.json();
+    const { studentId, courseId, qrToken, timestamp, deviceInfo, isLiveCapture, location } = data;
 
     // Validate required fields
-    if (!studentId || !courseId || !qrToken || !timestamp) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    if (!studentId || !courseId || !qrToken) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Validate QR token (in a real app, this would verify against a database)
-    if (!validateQrToken(qrToken)) {
-      return NextResponse.json({ error: "Invalid or expired QR code" }, { status: 400 })
+    // Connect to the database
+    await connectToDatabase();
+
+    // Validate QR token
+    const tokenValidation = verifyQRToken(qrToken);
+    if (!tokenValidation.valid) {
+      return NextResponse.json({ error: "Invalid QR code" }, { status: 400 });
+    }
+    
+    if (tokenValidation.expired) {
+      return NextResponse.json({ error: "QR code has expired" }, { status: 400 });
     }
 
     // Check for proxy attempts
     if (!isLiveCapture) {
-      return NextResponse.json({ error: "Proxy detection: QR code from image detected" }, { status: 403 })
+      return NextResponse.json({ error: "Proxy detection: QR code from image detected" }, { status: 403 });
     }
 
     // Record the attendance
-    const attendanceRecord = {
-      id: generateId(),
+    const attendanceRecord = await Attendance.create({
       studentId,
       courseId,
-      timestamp,
+      timestamp: timestamp || new Date(),
+      qrToken,
       deviceInfo,
-      status: "present",
-    }
+      location,
+      status: 'present',
+    });
 
-    attendanceRecords.push(attendanceRecord)
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Attendance recorded successfully",
-        record: attendanceRecord,
-      },
-      { status: 201 },
-    )
+    return NextResponse.json({
+      success: true,
+      message: "Attendance recorded successfully",
+      record: attendanceRecord,
+    }, { status: 201 });
+    
   } catch (error) {
-    console.error("Error recording attendance:", error)
-    return NextResponse.json({ error: "Failed to record attendance" }, { status: 500 })
+    console.error("Error recording attendance:", error);
+    return NextResponse.json({ error: "Failed to record attendance" }, { status: 500 });
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const url = new URL(req.url)
-    const studentId = url.searchParams.get("studentId")
-    const courseId = url.searchParams.get("courseId")
+    const url = new URL(req.url);
+    const studentId = url.searchParams.get("studentId");
+    const courseId = url.searchParams.get("courseId");
 
-    let filteredRecords = [...attendanceRecords]
+    // Connect to the database
+    await connectToDatabase();
 
-    if (studentId) {
-      filteredRecords = filteredRecords.filter((record) => record.studentId === studentId)
-    }
+    // Build query
+    const query: any = {};
+    if (studentId) query.studentId = studentId;
+    if (courseId) query.courseId = courseId;
 
-    if (courseId) {
-      filteredRecords = filteredRecords.filter((record) => record.courseId === courseId)
-    }
+    // Get attendance records
+    const records = await Attendance.find(query).sort({ timestamp: -1 });
 
-    return NextResponse.json({ records: filteredRecords })
+    return NextResponse.json({ records });
+    
   } catch (error) {
-    console.error("Error fetching attendance records:", error)
-    return NextResponse.json({ error: "Failed to fetch attendance records" }, { status: 500 })
+    console.error("Error fetching attendance records:", error);
+    return NextResponse.json({ error: "Failed to fetch attendance records" }, { status: 500 });
   }
-}
-
-// Helper functions
-function validateQrToken(token: string): boolean {
-  // In a real app, this would verify the token against a database
-  // and check if it's expired
-  return token.length > 10
-}
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 15)
 }

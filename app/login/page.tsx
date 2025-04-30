@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { QrCode } from "lucide-react"
-
+import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,7 @@ const formSchema = z.object({
 export default function LoginPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -35,20 +36,49 @@ export default function LoginPage() {
     },
   })
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    setIsLoading(true)
-
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false)
-
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsLoading(true);
+  
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(values),
+      });
+  
+      const data = await response.json();
+  
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+  
+      // Store token in localStorage or cookies
+      localStorage.setItem('authToken', data.token);
+      
+      // Login successful
+      toast({
+        title: "Login successful",
+        description: "Welcome back!",
+      });
+  
       // Redirect based on role
       if (values.role === "teacher") {
-        router.push("/teacher/dashboard")
+        router.push("/teacher/dashboard");
       } else {
-        router.push("/student/dashboard")
+        router.push("/student/dashboard");
       }
-    }, 1500)
+    } catch (error) {
+      console.error('Login error:', error);
+      toast({
+        title: "Login failed",
+        description: error instanceof Error ? error.message : "Invalid credentials",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
